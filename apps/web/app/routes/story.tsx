@@ -20,9 +20,11 @@ import { IconArrowLeft, IconChevronRight, IconClock, IconDoc, IconUsers } from "
 import { PhoneBar } from "../components/shell/PhoneBar";
 import { inNav, navUp } from "../components/shell/nav";
 import type { Screen } from "../components/shell/screens";
+import { loadParts } from "../site-modules";
 
 // Stories are reached from the hot board, as long as the site shows it.
 const UP = navUp("/hot");
+const PARTS = await loadParts((m) => m.storyPage);
 export const handle: Screen = { home: UP.tab };
 export { pageHeaders as headers } from "../lib/api.server";
 export const { clientLoader, shouldRevalidate } = pageReuse<typeof loader>();
@@ -335,6 +337,12 @@ export default function StoryPage() {
               </p>
             )}
           </Panel>
+
+          {PARTS.map(({ name, part: { Block } }) => (
+            <div key={name} className="order-4 min-w-0">
+              <Block story={story} />
+            </div>
+          ))}
 
           {observed && (
             <Panel id={SECTIONS.heat} title="本事件热度走势" className="order-5">

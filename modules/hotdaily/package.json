@@ -1,0 +1,17 @@
+{
+  "name": "@aihot/hotdaily",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./*.ts",
+    "./web": "./web.tsx"
+  },
+  "dependencies": {
+    "@aihot/api": "*",
+    "@aihot/backend": "*",
+    "@aihot/contracts": "*",
+    "@aihot/site": "*",
+    "nodemailer": "10.1.0",
+    "zod": "4.6.5"
+  }
+}

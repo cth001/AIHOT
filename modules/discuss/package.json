@@ -1,0 +1,16 @@
+{
+  "name": "@aihot/discuss",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./*.ts",
+    "./web": "./web.tsx"
+  },
+  "dependencies": {
+    "@aihot/api": "*",
+    "@aihot/backend": "*",
+    "@aihot/contracts": "*",
+    "@aihot/site": "*",
+    "zod": "4.6.5"
+  }
+}
