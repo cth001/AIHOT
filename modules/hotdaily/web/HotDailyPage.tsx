@@ -76,7 +76,7 @@ function Entry({ e }: { e: HotDailyEntry }) {
           {e.title}
         </IntentLink>
         {e.take && <p className="mt-1.5 text-[14px] leading-[1.75] text-ink-2"><span className="font-semibold text-accent">看点 </span>{e.take}</p>}
-        {e.summary && <p className="mt-1.5 text-[13.5px] leading-[1.8] text-ink-3">{e.summary}</p>}
+        {e.summary && <p className="mt-1.5 line-clamp-3 text-[13.5px] leading-[1.8] text-ink-3">{e.summary}</p>}
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-4">
           <span className="inline-flex items-center gap-1"><IconFlame size={12} />{e.participantCount} 个来源参与</span>
           {(e.trend === "up" || e.trend === "new") && <span className="inline-flex items-center gap-1 text-hot"><IconTrendUp size={12} />{e.trend === "new" ? "新上榜" : "上升"}</span>}
@@ -111,28 +111,19 @@ function Analysis({ a }: { a: HotDailyAnalysis }) {
       {a.stocks.length > 0 && (
         <>
           <h3 className="mt-4 text-[14px] font-semibold text-ink">可能受影响的上市公司</h3>
-          <div className="mt-2 overflow-x-auto">
-            <table className="w-full min-w-[560px] text-left text-[13.5px]">
-              <thead className="text-[12px] text-ink-4">
-                <tr className="border-b border-line">
-                  <th className="py-2 pr-3 font-medium">公司</th>
-                  <th className="py-2 pr-3 font-medium">方向</th>
-                  <th className="py-2 pr-3 font-medium">理由</th>
-                  <th className="py-2 font-medium">判断不成立的情形</th>
-                </tr>
-              </thead>
-              <tbody>
-                {a.stocks.map((s) => (
-                  <tr key={s.ticker} className="border-b border-line-soft align-top">
-                    <td className="py-2.5 pr-3 text-ink">{s.name}<span className="num ml-1.5 text-[12px] text-ink-4">{s.ticker}</span></td>
-                    <td className={`py-2.5 pr-3 font-semibold ${DIRECTION_TONE[s.direction]}`}>{s.direction}</td>
-                    <td className="py-2.5 pr-3 leading-[1.7] text-ink-2">{s.reason}</td>
-                    <td className="py-2.5 leading-[1.7] text-ink-3">{s.risk || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ul className="mt-2 divide-y divide-line-soft">
+            {a.stocks.map((s) => (
+              <li key={s.ticker} className="py-3">
+                <div className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="text-[14.5px] font-semibold text-ink">{s.name}</span>
+                  <span className="num text-[12px] text-ink-4">{s.ticker}</span>
+                  <span className={`ml-auto shrink-0 text-[13px] font-semibold ${DIRECTION_TONE[s.direction]}`}>{s.direction}</span>
+                </div>
+                <p className="mt-1 text-[13.5px] leading-[1.75] text-ink-2">{s.reason}</p>
+                {s.risk && <p className="mt-0.5 text-[12.5px] leading-[1.7] text-ink-4">判断不成立的情形：{s.risk}</p>}
+              </li>
+            ))}
+          </ul>
         </>
       )}
       <p className="mt-4 text-[12px] leading-[1.7] text-ink-4">以上分析由 AI 根据本期新闻自动生成，可能有误，仅供参考，不构成任何投资建议。</p>
