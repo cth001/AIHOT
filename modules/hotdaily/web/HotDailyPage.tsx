@@ -10,7 +10,8 @@ import { IconFlame, IconTrendUp } from "@aihot/web/components/icons";
 import { cachedPage, loadOr404 } from "@aihot/web/lib/api.server";
 import { pageReuse } from "@aihot/web/lib/page-reuse";
 import { pageMeta } from "@aihot/web/lib/seo";
-import type { HotDailyEntry, HotDailyPage } from "../contracts.ts";
+import { monthDayTime } from "@aihot/web/lib/format";
+import type { HotDailyAnalysis, HotDailyEntry, HotDailyPage } from "../contracts.ts";
 import { HOT_DAILY } from "../settings.ts";
 
 export const handle: Screen = { tab: "hot", name: "热度日报" };
@@ -79,10 +80,63 @@ function Entry({ e }: { e: HotDailyEntry }) {
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-4">
           <span className="inline-flex items-center gap-1"><IconFlame size={12} />{e.participantCount} 个来源参与</span>
           {(e.trend === "up" || e.trend === "new") && <span className="inline-flex items-center gap-1 text-hot"><IconTrendUp size={12} />{e.trend === "new" ? "新上榜" : "上升"}</span>}
+          {e.firstReportAt && <span>首次报道 {monthDayTime(e.firstReportAt)}</span>}
           {e.source && <span>代表报道：{e.source}</span>}
         </div>
       </div>
     </li>
+  );
+}
+
+const DIRECTION_TONE = { 利好: "text-ok", 利空: "text-hot", 中性: "text-ink-3" } as const;
+
+/** The issue's closing section: the day in summary, its market impact, the listed companies it may move. */
+function Analysis({ a }: { a: HotDailyAnalysis }) {
+  if (!a.summary && !a.market && !a.stocks.length) return null;
+  return (
+    <section className="card mt-4 px-5 py-5 lg:px-6">
+      <h2 className="text-[18px] font-semibold text-ink">今日总结与市场影响</h2>
+      {a.summary && (
+        <>
+          <h3 className="mt-4 text-[14px] font-semibold text-ink">今日总结</h3>
+          <p className="mt-1.5 text-[14.5px] leading-[1.85] text-ink-2">{a.summary}</p>
+        </>
+      )}
+      {a.market && (
+        <>
+          <h3 className="mt-4 text-[14px] font-semibold text-ink">市场影响</h3>
+          <p className="mt-1.5 text-[14.5px] leading-[1.85] text-ink-2">{a.market}</p>
+        </>
+      )}
+      {a.stocks.length > 0 && (
+        <>
+          <h3 className="mt-4 text-[14px] font-semibold text-ink">可能受影响的上市公司</h3>
+          <div className="mt-2 overflow-x-auto">
+            <table className="w-full min-w-[560px] text-left text-[13.5px]">
+              <thead className="text-[12px] text-ink-4">
+                <tr className="border-b border-line">
+                  <th className="py-2 pr-3 font-medium">公司</th>
+                  <th className="py-2 pr-3 font-medium">方向</th>
+                  <th className="py-2 pr-3 font-medium">理由</th>
+                  <th className="py-2 font-medium">判断不成立的情形</th>
+                </tr>
+              </thead>
+              <tbody>
+                {a.stocks.map((s) => (
+                  <tr key={s.ticker} className="border-b border-line-soft align-top">
+                    <td className="py-2.5 pr-3 text-ink">{s.name}<span className="num ml-1.5 text-[12px] text-ink-4">{s.ticker}</span></td>
+                    <td className={`py-2.5 pr-3 font-semibold ${DIRECTION_TONE[s.direction]}`}>{s.direction}</td>
+                    <td className="py-2.5 pr-3 leading-[1.7] text-ink-2">{s.reason}</td>
+                    <td className="py-2.5 leading-[1.7] text-ink-3">{s.risk || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+      <p className="mt-4 text-[12px] leading-[1.7] text-ink-4">以上分析由 AI 根据本期新闻自动生成，可能有误，仅供参考，不构成任何投资建议。</p>
+    </section>
   );
 }
 
@@ -122,6 +176,7 @@ export default function HotDailyRoute() {
         ) : (
           <EmptyState title="还没有出刊">每天 {HOT_DAILY.time} 出一期，热点不足 3 件的日子不出。</EmptyState>
         )}
+        {edition?.analysis && edition.entries.length > 0 && <Analysis a={edition.analysis} />}
       </ReadingLayout>
     </>
   );

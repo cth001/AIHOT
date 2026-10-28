@@ -3,7 +3,7 @@
 import { isValidDate } from "@aihot/contracts/time";
 import { sql } from "@aihot/backend/db";
 import { evidenceCondition, listedCondition } from "@aihot/backend/publication/scope";
-import type { HotDailyEdition, HotDailyEntry, HotDailyIndexEntry } from "../contracts.ts";
+import type { HotDailyAnalysis, HotDailyEdition, HotDailyEntry, HotDailyIndexEntry } from "../contracts.ts";
 
 async function current(entries: HotDailyEntry[], now: Date): Promise<HotDailyEntry[]> {
   if (!entries.length) return entries;
@@ -20,12 +20,12 @@ async function current(entries: HotDailyEntry[], now: Date): Promise<HotDailyEnt
 export async function editionFor(date: string, now = new Date()): Promise<HotDailyEdition | null> {
   if (date !== "latest" && !isValidDate(date)) return null;
   const [row] = date === "latest"
-    ? await sql<{ date: string; title: string; lead: string | null; entries: HotDailyEntry[]; composed_at: Date }[]>`
-        SELECT date::text, title, lead, entries, composed_at FROM hotdaily_editions ORDER BY date DESC LIMIT 1`
-    : await sql<{ date: string; title: string; lead: string | null; entries: HotDailyEntry[]; composed_at: Date }[]>`
-        SELECT date::text, title, lead, entries, composed_at FROM hotdaily_editions WHERE date = ${date}`;
+    ? await sql<{ date: string; title: string; lead: string | null; entries: HotDailyEntry[]; analysis: HotDailyAnalysis | null; composed_at: Date }[]>`
+        SELECT date::text, title, lead, entries, analysis, composed_at FROM hotdaily_editions ORDER BY date DESC LIMIT 1`
+    : await sql<{ date: string; title: string; lead: string | null; entries: HotDailyEntry[]; analysis: HotDailyAnalysis | null; composed_at: Date }[]>`
+        SELECT date::text, title, lead, entries, analysis, composed_at FROM hotdaily_editions WHERE date = ${date}`;
   if (!row) return null;
-  return { date: row.date, title: row.title, lead: row.lead, entries: await current(row.entries, now), composedAt: row.composed_at.toISOString() };
+  return { date: row.date, title: row.title, lead: row.lead, entries: await current(row.entries, now), analysis: row.analysis, composedAt: row.composed_at.toISOString() };
 }
 
 export async function editionIndex(limit = 60): Promise<HotDailyIndexEntry[]> {

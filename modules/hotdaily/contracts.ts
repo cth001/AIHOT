@@ -13,6 +13,25 @@ export interface HotDailyEntry {
   take: string | null;
   url: string | null;
   source: string | null;
+  /** When the event was first reported (absent on issues composed before it was kept). */
+  firstReportAt?: string;
+}
+
+/** A listed company the analysis says the day may move, from the module's list (listed.ts). */
+export interface HotDailyStock {
+  ticker: string;
+  exchange: string;
+  name: string;
+  direction: "利好" | "利空" | "中性";
+  reason: string;
+  risk: string;
+}
+
+/** The issue's closing section, written by the model from the events alone. */
+export interface HotDailyAnalysis {
+  summary: string | null;
+  market: string | null;
+  stocks: HotDailyStock[];
 }
 
 export interface HotDailyEdition {
@@ -20,6 +39,7 @@ export interface HotDailyEdition {
   title: string;
   lead: string | null;
   entries: HotDailyEntry[];
+  analysis: HotDailyAnalysis | null;
   composedAt: string;
 }
 

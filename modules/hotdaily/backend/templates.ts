@@ -34,11 +34,23 @@ export function editionMail(edition: HotDailyEdition, to: string, token: string)
   ${x.take ? `<div style="margin-top:6px;font-size:14px;line-height:1.7;color:${INK};">看点：${e(x.take)}</div>` : ""}
   ${x.summary ? `<div style="margin-top:6px;font-size:13.5px;line-height:1.75;color:#3a484c;">${e(x.summary)}</div>` : ""}
 </td></tr>`).join("");
+  const a = edition.analysis;
+  const stockRows = (a?.stocks ?? []).map((s) => `
+<tr><td style="padding:8px 8px 8px 0;border-bottom:1px solid #eef1f1;font-size:13.5px;vertical-align:top;">${e(s.name)}<br><span style="color:${MUTED};font-size:12px;">${e(s.ticker)}</span></td>
+<td style="padding:8px;border-bottom:1px solid #eef1f1;font-size:13.5px;font-weight:700;vertical-align:top;color:${s.direction === "利好" ? "#1a7f4b" : s.direction === "利空" ? "#c2412d" : MUTED};">${e(s.direction)}</td>
+<td style="padding:8px 0 8px 8px;border-bottom:1px solid #eef1f1;font-size:13.5px;line-height:1.7;vertical-align:top;">${e(s.reason)}${s.risk ? `<br><span style="color:${MUTED};font-size:12.5px;">风险：${e(s.risk)}</span>` : ""}</td></tr>`).join("");
+  const closing = a && (a.summary || a.market || a.stocks.length) ? `
+<h2 style="margin:24px 0 0;font-size:18px;">今日总结与市场影响</h2>
+${a.summary ? `<p style="margin:10px 0 0;font-size:14.5px;line-height:1.8;color:#3a484c;"><b>今日总结：</b>${e(a.summary)}</p>` : ""}
+${a.market ? `<p style="margin:10px 0 0;font-size:14.5px;line-height:1.8;color:#3a484c;"><b>市场影响：</b>${e(a.market)}</p>` : ""}
+${stockRows ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px;">${stockRows}</table>` : ""}
+<p style="margin:12px 0 0;font-size:12px;line-height:1.7;color:${MUTED};">以上分析由 AI 根据本期新闻自动生成，可能有误，仅供参考，不构成任何投资建议。</p>` : "";
   const body = `
 <div style="font-size:13px;color:${MUTED};">${e(HOT_DAILY.name)} · ${e(edition.date)}</div>
 <h1 style="margin:8px 0 0;font-size:22px;line-height:1.4;">${e(edition.title)}</h1>
 ${edition.lead ? `<p style="margin:14px 0 0;font-size:14.5px;line-height:1.8;color:#3a484c;">${e(edition.lead)}</p>` : ""}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px;">${rows}</table>
+${closing}
 <p style="margin:18px 0 0;"><a href="${e(issue)}" style="color:${ACCENT};font-size:14px;">在网站上阅读这一期 →</a></p>`;
   const footer = `你收到这封邮件，是因为 ${e(to)} 订阅了 ${e(HOT_DAILY.name)}。排序依据过去 48 小时内独立来源的报道和讨论热度，看点由 AI 撰写。<br>
 <a href="${e(unsubscribePage(token))}" style="color:${MUTED};">退订</a> · <a href="${e(config.siteUrl)}" style="color:${MUTED};">${e(SITE.name)}</a>`;
@@ -47,6 +59,10 @@ ${edition.lead ? `<p style="margin:14px 0 0;font-size:14.5px;line-height:1.8;col
     edition.title,
     edition.lead ?? "",
     ...edition.entries.map((x) => `${x.rank}. ${x.title}\n${x.take ? `看点：${x.take}\n` : ""}${config.siteUrl}/story/${x.storyPublicId}`),
+    a?.summary ? `今日总结：${a.summary}` : "",
+    a?.market ? `市场影响：${a.market}` : "",
+    ...(a?.stocks ?? []).map((s) => `${s.name}（${s.ticker}）${s.direction}：${s.reason}${s.risk ? `（风险：${s.risk}）` : ""}`),
+    a && (a.summary || a.market || a.stocks.length) ? "以上分析由 AI 自动生成，仅供参考，不构成任何投资建议。" : "",
     `在网站上阅读：${issue}`,
     `退订：${unsubscribePage(token)}`,
   ].filter(Boolean).join("\n\n");

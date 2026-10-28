@@ -26,8 +26,18 @@ let smtp: net.Server;
 
 before(async () => {
   installModules([hotdaily]);
-  model = await stub(() => {
-    const content = { title: "Acme 新模型领跑", lead, takes: [{ rank: 1, take: "Acme 的新模型值得关注" }, { rank: 2, take: "提到 Initech 的看点" }] };
+  model = await stub((_hit, req) => {
+    const content = req.body.includes("行业分析师")
+      ? {
+          summary: "Acme 的新模型是今天的主线。股价单日上涨 12.5%。",
+          market: "算力需求或将继续走强。建议逢低买入相关芯片股。",
+          stocks: [
+            { ticker: "nvda", direction: "利好", reason: "新模型训练和推理带动算力需求", risk: "需求不及预期" },
+            { ticker: "FAKE", direction: "利空", reason: "清单里没有这家公司", risk: "" },
+            { ticker: "MSFT", direction: "中性", reason: "云收入将增长 35%", risk: "" },
+          ],
+        }
+      : { title: "Acme 新模型领跑", lead, takes: [{ rank: 1, take: "Acme 的新模型值得关注" }, { rank: 2, take: "提到 Initech 的看点" }] };
     return { choices: [{ message: { content: JSON.stringify(content) } }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } };
   });
   pointModels(model.url, ["deepseek-flash"]);
@@ -97,6 +107,10 @@ test("an issue takes the top of the ranking, and the model's words only where th
   assert.equal(issue?.title, "Acme 新模型领跑");
   assert.equal(issue?.lead, "Acme 和 Globex 都有新进展。");
   assert.deepEqual(issue?.entries.map((e) => [e.rank, e.take]), [[1, "Acme 的新模型值得关注"], [2, null], [3, null]]);
+  // The closing analysis keeps no invented figure, no trading advice and no company off the list.
+  assert.equal(issue?.analysis?.summary, "Acme 的新模型是今天的主线。");
+  assert.equal(issue?.analysis?.market, "算力需求或将继续走强。");
+  assert.deepEqual(issue?.analysis?.stocks.map((s) => [s.ticker, s.name, s.direction]), [["NVDA", "英伟达", "利好"]]);
 
   // A lead naming a company none of the events names is dropped. (The same events would reuse the paid
   // answer, so the ranking changes too.)
