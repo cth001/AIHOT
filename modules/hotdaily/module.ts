@@ -10,5 +10,5 @@ export default defineModule({
     { path: "hot-daily/:date", file: "web/HotDailyPage.tsx", id: "hotdaily-date" },
   ],
   adminPages: [{ path: "admin/hot-daily", file: "web/AdminHotDaily.tsx" }],
-  apiPaths: [/^\/api\/hotdaily\//, /^\/api\/admin\/hotdaily(?:\/|$)/],
+  apiPaths: [/^\/hot-daily\/feed\.xml$/, /^\/api\/hotdaily\//, /^\/api\/admin\/hotdaily(?:\/|$)/],
 });

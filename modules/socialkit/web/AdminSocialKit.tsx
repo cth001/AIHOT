@@ -8,7 +8,7 @@ import { copyText } from "@aihot/web/lib/clipboard";
 import { useAdminAction } from "@aihot/web/features/admin/action";
 import { toast } from "@aihot/web/features/admin/toast";
 import { AdminPage, Badge, Button, Card, Empty, Select } from "@aihot/web/features/admin/ui";
-import type { KitImage, SocialKit, SocialKitAdmin, SocialPlatform } from "../contracts.ts";
+import type { KitImage, KitPost, SocialKit, SocialKitAdmin, SocialPlatform } from "../contracts.ts";
 import { SOCIAL_KIT } from "../settings.ts";
 
 export async function loader({ request }: { request: Request }) {
@@ -80,15 +80,54 @@ function Images({ kit, images }: { kit: SocialKit; images: KitImage[] }) {
   );
 }
 
+const POST_STATUS: Record<KitPost["status"], [string, "ok" | "warn" | "bad" | "muted" | "info"]> = {
+  publishing: ["发布中", "info"], published: ["已发布", "ok"], drafted: ["已存草稿", "warn"], failed: ["发布失败", "bad"], manual: ["待手动发布", "muted"],
+};
+
+function Publishing({ kit, publishers }: { kit: SocialKit; publishers: SocialKitAdmin["publishers"] }) {
+  const { run, pending } = useAdminAction();
+  const posts = new Map(kit.posts.map((p) => [p.platform, p]));
+  const ready = !!kit.copy && !!kit.cards;
+  return (
+    <Card title="发布到社媒" right={<span className="text-[12px] text-ink-4">先核对图片和文案，再逐个平台发布</span>}>
+      <ul className="divide-y divide-line-soft">
+        {PLATFORMS.map(({ key, label }) => {
+          const post = posts.get(key);
+          const state = publishers[key];
+          const done = post?.status === "published";
+          const [statusLabel, tone] = post ? POST_STATUS[post.status] : ["未发布", "muted" as const];
+          return (
+            <li key={key} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2.5">
+              <span className="w-28 shrink-0 text-[13.5px] font-medium text-ink">{label}</span>
+              <Badge tone={tone}>{statusLabel}</Badge>
+              {post?.url && <a href={post.url} target="_blank" rel="noreferrer" className="text-[12.5px] text-accent hover:underline">查看</a>}
+              <span className="min-w-0 flex-1 truncate text-[12px] text-ink-4" title={post?.error ?? state.note}>{post?.error ?? state.note}</span>
+              {key === "xiaohongshu" ? (
+                <Button size="sm" disabled={done || !ready} busy={pending === `mark-${key}`}
+                  onClick={() => run("POST", `/api/admin/socialkit/${kit.date}/mark-published`, { platform: key, url: window.prompt("小红书笔记链接（可不填）") ?? "" }, { label: `mark-${key}`, success: "已标记为已发布" })}>标记已发布</Button>
+              ) : (
+                <Button size="sm" tone="primary" disabled={done || !ready || !state.ready} busy={pending === `publish-${key}`}
+                  onClick={() => window.confirm(`确认把 ${kit.date} 的内容发布到${label}？发布后无法从这里撤回。`) && run("POST", `/api/admin/socialkit/${kit.date}/publish`, { platform: key }, { label: `publish-${key}`, success: `已提交到${label}` })}>
+                  {post?.status === "failed" || post?.status === "drafted" ? "重试" : "发布"}
+                </Button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
+  );
+}
+
 export default function AdminSocialKit() {
-  const { kit, dates } = useLoaderData<typeof loader>();
+  const { kit, dates, publishers, imageModel } = useLoaderData<typeof loader>();
   const [params, setParams] = useSearchParams();
   const [platform, setPlatform] = useState<SocialPlatform>("xiaohongshu");
   const { run, pending } = useAdminAction();
   return (
     <AdminPage
       title="社媒素材包"
-      subtitle={`每天 ${SOCIAL_KIT.time}（北京时间）取热度榜前 ${SOCIAL_KIT.items} 件事，生成各平台的封面、概要图和文案。由模型撰写，发布前请核对。`}
+      subtitle={`每天 ${SOCIAL_KIT.time}（北京时间）以当天的热度日报及其分析为依据，先写各平台文案，再生成封面和概要图${imageModel ? `（配图模型：${imageModel}）` : "（未配置文生图模型，使用纯排版图）"}。由模型撰写，发布前请核对。`}
       actions={
         <>
           {dates.length > 0 && (
@@ -96,12 +135,12 @@ export default function AdminSocialKit() {
               {dates.map((d) => <option key={d} value={d}>{d}</option>)}
             </Select>
           )}
-          <Button tone="primary" busy={pending === "compose"} onClick={() => run("POST", "/api/admin/socialkit/compose", {}, { label: "compose", success: "已按当前热度榜重新生成今天的素材包" })}>按当前热度重新生成</Button>
+          <Button tone="primary" busy={pending === "compose"} onClick={() => run("POST", "/api/admin/socialkit/compose", {}, { label: "compose", success: "已按今天的热度日报重新生成素材包" })}>按今天的日报重新生成</Button>
         </>
       }
     >
       {!kit ? (
-        <Empty>还没有素材包。热度榜有 3 件以上的事件后，到点会自动生成，也可以点右上角立即生成。</Empty>
+        <Empty>还没有素材包。当天的热度日报出刊后，到点会自动生成，也可以点右上角立即生成。</Empty>
       ) : (
         <>
           <Card title={`${kit.date} 的 ${kit.items.length} 件事`} right={kit.error ? <Badge tone="bad" title={kit.error}>生成出错</Badge> : null}>
@@ -114,7 +153,9 @@ export default function AdminSocialKit() {
                 </li>
               ))}
             </ol>
+            {kit.analysis?.summary && <p className="mt-3 border-t border-line-soft pt-3 text-[13px] leading-[1.75] text-ink-3"><span className="font-medium text-ink-2">日报总结：</span>{kit.analysis.summary}</p>}
           </Card>
+          <div className="mt-4"><Publishing kit={kit} publishers={publishers} /></div>
           <div className="mt-4 flex flex-wrap gap-2">
             {PLATFORMS.map((p) => (
               <Button key={p.key} tone={platform === p.key ? "primary" : "secondary"} onClick={() => setPlatform(p.key)}>{p.label}</Button>

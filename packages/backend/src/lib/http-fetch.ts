@@ -66,7 +66,8 @@ function dispatcherFor(viaProxy: boolean, privateHost: boolean): Dispatcher | un
 export interface GuardedFetchOptions {
   method?: string;
   headers?: Record<string, string>;
-  body?: string;
+  /** Text, or bytes for an upload (multipart). */
+  body?: string | Uint8Array;
   timeoutMs?: number;
   maxBytes?: number;
   /** Return the first maxBytes of a longer body (`truncated`) instead of failing. */

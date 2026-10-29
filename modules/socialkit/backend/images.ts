@@ -5,8 +5,9 @@ import { createHash } from "node:crypto";
 import { SITE } from "@aihot/site";
 import { brandMark, clamp, h, nameMark, renderPng, type Node } from "@aihot/backend/media/og";
 import type { KitCards, KitImage, KitItem, SocialKit, SocialPlatform } from "../contracts.ts";
+import { readArt } from "./imagegen.ts";
 
-export const SOCIAL_TEMPLATE_VERSION = "social-2026-10-25.1";
+export const SOCIAL_TEMPLATE_VERSION = "social-2026-10-29.1";
 
 const INK = "#0e191b";
 const ACCENT = "#176b75";
@@ -49,14 +50,31 @@ async function mark(height: number, dark: boolean): Promise<Node> {
   return (await brandMark(dark ? "wordmark-dark.svg" : "wordmark.svg", height)) ?? nameMark(height * 0.88, dark ? "#e6eded" : INK, dark ? "#2ce2e8" : ACCENT);
 }
 
-async function cover(shape: Shape, date: string, cards: KitCards, items: KitItem[]): Promise<Node> {
+/**
+ * An AI illustration under the drawing: the picture fills the frame and a veil keeps the words on it readable
+ * (dark for covers, light for cards). Without one the frame keeps its plain background.
+ */
+function layered(frame: Record<string, unknown>, art: string | null, veil: string, children: unknown[]): Node {
+  if (!art) return h("div", frame, children.filter(Boolean));
+  const { width, height } = frame as { width: number; height: number };
+  return h("div", { ...frame, position: "relative" }, [
+    h("img", { position: "absolute", top: 0, left: 0, width, height, objectFit: "cover" }, undefined, { src: art, width, height }),
+    h("div", { position: "absolute", top: 0, left: 0, width, height, backgroundImage: veil }),
+    ...children.filter(Boolean),
+  ]);
+}
+
+const DARK_VEIL = "linear-gradient(180deg, rgba(10,16,18,0.55) 0%, rgba(10,16,18,0.78) 45%, rgba(10,16,18,0.94) 100%)";
+const LIGHT_VEIL = "linear-gradient(180deg, rgba(245,246,245,0.80) 0%, rgba(245,246,245,0.90) 40%, rgba(245,246,245,0.96) 100%)";
+
+async function cover(shape: Shape, date: string, cards: KitCards, items: KitItem[], art: string | null): Promise<Node> {
   const { width, height } = SIZES[shape];
   const bg = {
     width, height, display: "flex", flexDirection: "column", fontFamily: "Noto Sans SC", color: "#e6eded", backgroundColor: NIGHT,
     backgroundImage: "radial-gradient(circle at 92% 6%, rgba(232,85,58,0.35), rgba(10,16,18,0) 45%), radial-gradient(circle at 0% 100%, rgba(23,107,117,0.45), rgba(10,16,18,0) 55%)",
   };
   if (shape === "banner") {
-    return h("div", { ...bg, padding: "36px 44px", justifyContent: "space-between" }, [
+    return layered({ ...bg, padding: "36px 44px", justifyContent: "space-between" }, art, DARK_VEIL, [
       h("div", { display: "flex", alignItems: "center", justifyContent: "space-between" }, [await mark(30, true), h("div", { display: "flex", fontSize: 22, color: "#82939a" }, dateLabel(date))]),
       h("div", { display: "flex", fontSize: 56, fontWeight: 700, lineHeight: 1.2, color: "#ffffff" }, clamp(cards.cover.headline, 16)),
       h("div", { display: "flex", fontSize: 24, color: "#b1bec0" }, clamp(cards.cover.sub, 26)),
@@ -64,7 +82,7 @@ async function cover(shape: Shape, date: string, cards: KitCards, items: KitItem
   }
   const s = Math.min(width, height) / 1080;
   const list = shape === "landscape" ? items.slice(0, 5) : items;
-  return h("div", { ...bg, padding: `${80 * s}px ${84 * s}px ${64 * s}px` }, [
+  return layered({ ...bg, padding: `${80 * s}px ${84 * s}px ${64 * s}px` }, art, DARK_VEIL, [
     h("div", { display: "flex", alignItems: "center", justifyContent: "space-between" }, [
       await mark(46 * s, true),
       h("div", { display: "flex", fontSize: 30 * s, color: "#82939a" }, dateLabel(date)),
@@ -85,7 +103,7 @@ async function cover(shape: Shape, date: string, cards: KitCards, items: KitItem
   ]);
 }
 
-async function card(shape: Shape, date: string, cards: KitCards, item: KitItem, total: number): Promise<Node> {
+async function card(shape: Shape, date: string, cards: KitCards, item: KitItem, total: number, art: string | null): Promise<Node> {
   const { width, height } = SIZES[shape];
   const s = Math.min(width, height) / 1080;
   const c = cards.items.find((x) => x.rank === item.rank) ?? { tag: "热点", headline: item.title, points: [] };
@@ -96,10 +114,10 @@ async function card(shape: Shape, date: string, cards: KitCards, item: KitItem, 
       h("div", { width: 12 * s, height: 12 * s, borderRadius: 999, backgroundColor: ACCENT, marginTop: 20 * s, marginRight: 22 * s, flexShrink: 0 }),
       h("div", { display: "flex", flex: 1, fontSize: (shape === "portrait" ? 42 : square ? 36 : 38) * s, lineHeight: 1.55, color: "#2a383c" }, p),
     ])));
-  return h("div", {
+  return layered({
     width, height, display: "flex", flexDirection: "column", padding: `${76 * s}px ${84 * s}px ${60 * s}px`, fontFamily: "Noto Sans SC", color: INK, backgroundColor: "#f5f6f5",
     backgroundImage: "radial-gradient(circle at 100% 0%, rgba(23,107,117,0.16), rgba(245,246,245,0) 50%), radial-gradient(circle at 0% 100%, rgba(232,85,58,0.08), rgba(245,246,245,0) 45%)",
-  }, [
+  }, art, LIGHT_VEIL, [
     h("div", { display: "flex", alignItems: "center", justifyContent: "space-between" }, [
       await mark(42 * s, false),
       h("div", { display: "flex", fontSize: 28 * s, color: "#66757a" }, `${dateLabel(date)} · ${item.rank}/${total}`),
@@ -135,6 +153,12 @@ export async function kitImage(kit: SocialKit, file: string): Promise<Buffer | n
   const item = kit.items.find((i) => i.rank === rank);
   const shape = coverShape ?? PLATFORM_SHAPES[image.platform].cards;
   if (!shape) return null;
-  const key = createHash("sha256").update(SOCIAL_TEMPLATE_VERSION).update(JSON.stringify([kit.date, file, cards, kit.items])).digest("hex").slice(0, 24);
-  return renderPng(`social-${key}`, SIZES[shape], () => (coverShape ? cover(shape, kit.date, cards, kit.items) : card(shape, kit.date, cards, item!, kit.items.length)));
+  const slot = coverShape ? "cover" : String(rank);
+  const artFile = kit.art?.[slot] ?? null;
+  const key = createHash("sha256").update(SOCIAL_TEMPLATE_VERSION).update(JSON.stringify([kit.date, file, cards, kit.items, artFile])).digest("hex").slice(0, 24);
+  return renderPng(`social-${key}`, SIZES[shape], async () => {
+    const bytes = artFile ? await readArt(artFile) : null;
+    const art = bytes ? `data:image/png;base64,${bytes.toString("base64")}` : null;
+    return coverShape ? cover(shape, kit.date, cards, kit.items, art) : card(shape, kit.date, cards, item!, kit.items.length, art);
+  });
 }

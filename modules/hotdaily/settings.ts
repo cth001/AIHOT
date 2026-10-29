@@ -5,5 +5,5 @@ import { SITE } from "@aihot/site";
 export const HOT_DAILY = {
   name: `${SITE.name} 热度日报`,
   time: "08:30",
-  entries: 20,
+  entries: 5,
 };

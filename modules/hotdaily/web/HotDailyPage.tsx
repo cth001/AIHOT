@@ -6,7 +6,7 @@ import { IntentLink } from "@aihot/web/components/ui/IntentLink";
 import { AsideCard, EmptyState, ReadingLayout } from "@aihot/web/components/ui/Page";
 import { PhoneBar } from "@aihot/web/components/shell/PhoneBar";
 import type { Screen } from "@aihot/web/components/shell/screens";
-import { IconFlame, IconTrendUp } from "@aihot/web/components/icons";
+import { IconFlame, IconRss, IconTrendUp } from "@aihot/web/components/icons";
 import { cachedPage, loadOr404 } from "@aihot/web/lib/api.server";
 import { pageReuse } from "@aihot/web/lib/page-reuse";
 import { pageMeta } from "@aihot/web/lib/seo";
@@ -135,7 +135,12 @@ export default function HotDailyRoute() {
   const { edition, index, subscribe } = useLoaderData<typeof loader>();
   const aside = (
     <>
-      {subscribe && <AsideCard title="订阅热度日报"><Subscribe /></AsideCard>}
+      <AsideCard title="订阅热度日报">
+        {subscribe ? <Subscribe /> : <p className="text-[13px] leading-[1.75] text-ink-3">邮件订阅暂未开放，可以先用 RSS 订阅。</p>}
+        <a href="/hot-daily/feed.xml" className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-medium text-accent hover:underline">
+          <IconRss size={14} /> RSS 订阅
+        </a>
+      </AsideCard>
       {index.length > 0 && (
         <AsideCard title="往期">
           <nav className="-mx-2 max-h-[420px] overflow-y-auto">

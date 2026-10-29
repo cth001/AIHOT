@@ -3,13 +3,14 @@ import type { FastifyInstance } from "fastify";
 import { audit } from "@aihot/backend/audit";
 import { actorOf } from "@aihot/backend/admin/auth";
 import { beijingDate } from "@aihot/contracts/time";
-import { clientIp, sendJsonWithEtag, sendProblem } from "@aihot/api/http/respond";
+import { clientIp, sendJsonWithEtag, sendProblem, sendTextWithEtag } from "@aihot/api/http/respond";
 import { adminHandler } from "@aihot/api/routes/admin-auth";
 import { body, orNotFound, page, param, q } from "@aihot/api/routes/admin";
 import { hotdailyAdmin } from "../backend/admin.ts";
 import { composeHotDaily } from "../backend/compose.ts";
 import { deliverEdition, sendTest } from "../backend/deliver.ts";
 import { sendingEnabled } from "../backend/mail.ts";
+import { hotDailyFeed } from "../backend/feed.ts";
 import { editionFor, editionIndex } from "../backend/read.ts";
 import { confirm, eraseSubscriber, normalEmail, subscribe, SubscribeRejected, unsubscribe } from "../backend/subscribers.ts";
 import type { HotDailyPage } from "../contracts.ts";
@@ -23,6 +24,9 @@ export function registerHotDaily(app: FastifyInstance) {
     const answer: HotDailyPage = { edition, index, subscribe: sendingEnabled() };
     return sendJsonWithEtag(req, reply, answer, { etagPrefix: "hotdaily", cacheControl: PUBLIC_CACHE });
   });
+
+  app.get("/hot-daily/feed.xml", async (req, reply) =>
+    sendTextWithEtag(req, reply, await hotDailyFeed(), { etagPrefix: "hotdaily-feed", cacheControl: "public, max-age=300", contentType: "application/rss+xml; charset=utf-8" }));
 
   app.post("/api/hotdaily/subscribe", async (req, reply) => {
     const b = body<{ email?: string; website?: string }>(req);
