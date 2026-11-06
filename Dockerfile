@@ -20,6 +20,7 @@ COPY site/package.json site/
 COPY modules/discuss/package.json modules/discuss/
 COPY modules/hotdaily/package.json modules/hotdaily/
 COPY modules/socialkit/package.json modules/socialkit/
+COPY modules/sourceinsight/package.json modules/sourceinsight/
 RUN npm ci --no-audit --no-fund ${NPM_REGISTRY:+--registry=$NPM_REGISTRY}
 COPY . .
 RUN npm run build -w @aihot/web && npm prune --omit=dev --no-audit --no-fund

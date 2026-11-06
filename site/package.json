@@ -15,6 +15,7 @@
   "dependencies": {
     "@aihot/discuss": "*",
     "@aihot/hotdaily": "*",
-    "@aihot/socialkit": "*"
+    "@aihot/socialkit": "*",
+    "@aihot/sourceinsight": "*"
   }
 }

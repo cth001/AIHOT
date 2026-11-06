@@ -5,5 +5,6 @@ import type { ModuleDeclaration } from "@aihot/contracts/modules";
 import discuss from "@aihot/discuss/module";
 import hotdaily from "@aihot/hotdaily/module";
 import socialkit from "@aihot/socialkit/module";
+import sourceinsight from "@aihot/sourceinsight/module";
 
-export const MODULES: readonly ModuleDeclaration[] = [discuss, hotdaily, socialkit];
+export const MODULES: readonly ModuleDeclaration[] = [discuss, hotdaily, socialkit, sourceinsight];
