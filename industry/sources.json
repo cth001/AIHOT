@@ -520,10 +520,10 @@
       "config": {
         "url": "https://www.anthropic.com/news",
         "parseMode": "html",
-        "itemSelector": "li[class*='TableView'][class*='__row']",
+        "itemSelector": "li:has(a[class*='title-link'])",
         "linkSelector": "a[class*='title-link']",
         "titleSelector": "a[class*='title-link'] h3",
-        "publishedAtSelector": "[class*='__date'] time",
+        "publishedAtSelector": "time",
         "publishedAtUtcOffset": "+00:00",
         "allowUrlPrefixes": [
           "https://www.anthropic.com/news/"
