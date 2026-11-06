@@ -1,5 +1,6 @@
 // Collection run for one source: fetch listing → filter → store material → enqueue processing.
 // A failed fetch never advances the success cursor; the source's health reflects consecutive failures.
+import { COLLECTION } from "@aihot/site";
 import { sql, type Db } from "../db.ts";
 import { fillScheduledPublications, identityKeyFor, reuseExternalMaterialIdentities, STALE_ON_DISCOVERY_MS, upsertMaterial } from "../content/materials.ts";
 import { PresentationMismatch } from "../content/presentation.ts";
@@ -92,7 +93,7 @@ export async function listingEntries(source: SourceRow, found: Candidate[]): Pro
  * and passes an undated entry; `admits` judges again after detail pages may have dated it.
  */
 function admission(source: SourceRow, known: Map<string, StoredDetail>, firstImport: boolean) {
-  const months = Number(source.config._aihot?.initialBackfillMonths ?? 12);
+  const months = Number(source.config._aihot?.initialBackfillMonths ?? COLLECTION.firstImport.months);
   const floor = firstImport ? Date.now() - months * 30 * DAY_MS
     : source.kind === "x_search" ? null : Date.parse(String(source.cursor!.initializedAt)) - STALE_ON_DISCOVERY_MS;
   const byListing = (c: Candidate) => floor === null || !firstImport && known.has(c.identityKey!) || !(c.publishedAt && c.publishedAt.getTime() < floor);
@@ -250,9 +251,12 @@ async function store(sourceId: string, runId: number, candidates: CollectionCand
 
 /**
  * The end of a fetch run, on the run and on its source. Success marks the source healthy and due again
- * one interval later. A failure counts toward "failing" (5 in a row) and waits longer after each one,
- * up to six hours; a full budget is not the source's failure: it waits 15 minutes and counts nothing.
+ * one interval later. A failure counts toward "failing" (COLLECTION.failure.failingAfter in a row) and waits
+ * longer after each one, up to its maxBackoffMinutes; a full budget is not the source's failure: it waits
+ * budgetRetryMinutes and counts nothing.
  */
+const failure = COLLECTION.failure;
+
 async function recordFetch(db: Db, sourceId: string, runId: number, run: { found: number; created: number; detail: object | null } & ({ cursor: Record<string, unknown> } | { error: string; budget: boolean })): Promise<void> {
   const detail = run.detail ? db.json(run.detail as never) : null;
   if ("cursor" in run) {
@@ -269,8 +273,8 @@ async function recordFetch(db: Db, sourceId: string, runId: number, run: { found
     UPDATE sources SET last_fetch_at = now(),
       fail_count = CASE WHEN ${run.budget} THEN fail_count ELSE fail_count + 1 END,
       last_error = ${run.error},
-      health = CASE WHEN ${run.budget} THEN health WHEN fail_count + 1 >= 5 THEN 'failing' ELSE 'degraded' END,
-      next_fetch_at = now() + make_interval(mins => CASE WHEN ${run.budget} THEN 15 ELSE LEAST(interval_minutes * (fail_count + 2), 360) END),
+      health = CASE WHEN ${run.budget} THEN health WHEN fail_count + 1 >= ${failure.failingAfter} THEN 'failing' ELSE 'degraded' END,
+      next_fetch_at = now() + make_interval(mins => CASE WHEN ${run.budget} THEN ${failure.budgetRetryMinutes} ELSE LEAST(interval_minutes * (fail_count + 2), ${failure.maxBackoffMinutes}) END),
       updated_at = now()
     WHERE id = ${sourceId}`;
   await db`UPDATE fetch_runs SET status = 'failed', finished_at = now(), found_count = ${run.found}, new_count = ${run.created},
@@ -333,7 +337,7 @@ export async function collectSource(sourceId: string, opts: { force?: boolean; x
     const { byListing, admits } = admission(source, known, firstImport);
     candidates = candidates.filter(byListing);
     // First import of a new source: bounded, and archived by source time (never "today", never pushed).
-    if (firstImport) candidates = candidates.slice(0, Number(source.config._aihot?.initialBackfillLimit ?? 30));
+    if (firstImport) candidates = candidates.slice(0, Number(source.config._aihot?.initialBackfillLimit ?? COLLECTION.firstImport.limit));
     const reads = await enrichDetails(candidates, source, known, {
       budget: Number(d?.maxFetches ?? 0), admits,
       after: source.cursor?.detailRules === rules ? source.cursor?.detailAfter : undefined,
@@ -484,7 +488,7 @@ export async function scheduleDueSources(): Promise<{ enqueued: number; shards: 
   const rows = await sql<{ id: string }[]>`
     SELECT id FROM sources
     WHERE enabled AND kind IN ('rss', 'web_list', 'json_list', 'x_search') AND (next_fetch_at IS NULL OR next_fetch_at <= now()) AND NOT (${sharded()})
-    ORDER BY next_fetch_at NULLS FIRST LIMIT 40`;
+    ORDER BY next_fetch_at NULLS FIRST LIMIT ${COLLECTION.schedulePerMinute}`;
   let enqueued = 0;
   for (const r of rows) {
     if (await enqueue(QUEUES.fetchSource, { sourceId: r.id }, { singletonKey: r.id })) enqueued += 1;
@@ -493,12 +497,11 @@ export async function scheduleDueSources(): Promise<{ enqueued: number; shards: 
   return { enqueued, shards: await scheduleXShards() };
 }
 
-/** Minutes between reads of a shard: editorial accounts every half hour, hot-signal accounts hourly. */
-const X_SHARD_MINUTES: Record<string, number> = { editorial: 30, hot_signal: 60 };
-const shardMinutes = (mode: string) => X_SHARD_MINUTES[mode] ?? 60;
+/** Minutes between reads of a shard, by participation (COLLECTION.xShardMinutes; hourly for any other). */
+const shardMinutes = (mode: string) => COLLECTION.xShardMinutes[mode] ?? 60;
 
 /**
- * Daily: adapt each source's interval to its recent output (active 15 min … quiet 120 min).
+ * Daily: adapt each source's interval to its recent output, within the bounds of COLLECTION.interval.
  * hot_signal sources are allowed to be slower.
  */
 export async function adaptIntervals(): Promise<{ updated: number }> {
@@ -506,17 +509,17 @@ export async function adaptIntervals(): Promise<{ updated: number }> {
     SELECT s.id, s.participation_mode, s.kind, s.config, s.cursor, coalesce(s.config->>'url', '') LIKE 'https://r.jina.ai/%' AS paid_listing,
       (SELECT count(*) FROM articles a WHERE a.source_id = s.id AND a.discovered_at > now() - interval '7 days' AND NOT a.backfill) / 7.0 AS per_day
     FROM sources s WHERE s.enabled AND s.kind IN ('rss', 'web_list', 'json_list', 'x_search')`;
+  const { min: least, max: most, jinaMin, paidMax, hotSignalMax, fetchesPerItem, quietPerDay } = COLLECTION.interval;
   let updated = 0;
   for (const r of rows) {
     const perDay = Number(r.per_day);
-    // Editorial sites and feeds are looked at hourly at least (they cost nothing);
-    // editorial X and listings read through Jina stop at two hours (paid per call, within their budgets);
-    // hot signals may wait longer.
-    const max = r.participation_mode === "hot_signal" ? 180 : r.kind === "x_search" || r.paid_listing ? 120 : 60;
-    // Listings read through Jina are not looked at more than hourly: busy ones would outrun its daily budget.
-    const min = r.paid_listing ? 60 : 15;
+    // Editorial sites and feeds are looked at often (they cost nothing); editorial X and listings read
+    // through Jina stop earlier (paid per call, within their budgets); hot signals may wait longer.
+    const max = r.participation_mode === "hot_signal" ? hotSignalMax : r.kind === "x_search" || r.paid_listing ? paidMax : most;
+    // Listings read through Jina are not looked at too often: busy ones would outrun its daily budget.
+    const min = r.paid_listing ? jinaMin : least;
     // X accounts read by shard follow the shard's pace, whatever their own volume.
-    const target = shardHandle(r) ? shardMinutes(r.participation_mode) : perDay <= 0.15 ? max : Math.round(Math.min(max, Math.max(min, (24 * 60) / (perDay * 3))));
+    const target = shardHandle(r) ? shardMinutes(r.participation_mode) : perDay <= quietPerDay ? max : Math.round(Math.min(max, Math.max(min, (24 * 60) / (perDay * fetchesPerItem))));
     const res = await sql`UPDATE sources SET interval_minutes = ${target} WHERE id = ${r.id} AND interval_minutes <> ${target}`;
     updated += res.count;
   }

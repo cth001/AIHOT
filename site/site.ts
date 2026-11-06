@@ -234,6 +234,29 @@ export const SOURCE_DEFAULTS = {
 };
 
 /**
+ * 采集的节奏，worker 读，改完重新构建生效。默认值适合几十个信源；信源多了、机器强了再调大。
+ * 调大并发和频率会多发请求：X、公众号、Jina 按请求计费，先看后台“设置 → 付费请求上限”。
+ */
+export const COLLECTION = {
+  /** 每分钟最多把多少个到期信源放进抓取队列（X 合并搜索另算）。 */
+  schedulePerMinute: 40,
+  /** 同时抓几个信源、几组 X 合并搜索、几个公众号。 */
+  concurrency: { sources: 8, xShards: 2, mpAccounts: 2 },
+  /**
+   * 每天 04:20 按近 7 天的产出自动调整每个信源的拉取间隔（分钟）：目标是平均每产出一条拉 fetchesPerItem 次，
+   * 限制在 min～max 之间；日均产出低于 quietPerDay 条的直接用最长间隔。经 Jina 读的网页列表最短 jinaMin；
+   * X 账号和经 Jina 的网页列表最长 paidMax；只作热度证据的信源最长 hotSignalMax。
+   */
+  interval: { min: 15, max: 60, jinaMin: 60, paidMax: 120, hotSignalMax: 180, fetchesPerItem: 3, quietPerDay: 0.15 },
+  /** 合并搜索的 X 账号多久搜一次（分钟），按参与方式。 */
+  xShardMinutes: { editorial: 30, hot_signal: 60 } as Record<string, number>,
+  /** 连续失败几次标为“失败”；失败后的重试间隔（拉取间隔 ×（失败次数 + 1））最长几分钟；付费额度用完后几分钟再试。 */
+  failure: { failingAfter: 5, maxBackoffMinutes: 360, budgetRetryMinutes: 15 },
+  /** 新信源第一次导入：最多几条、几个月以内。单个信源可以在配置的 _aihot 里覆盖。 */
+  firstImport: { limit: 30, months: 12 },
+};
+
+/**
  * 社区站的信源（填信源 id）：算热度时按发帖的账号计，一个账号算一个独立来源，而不是整个信源只算一个。
  * dev 是 dev.to 的文章流，hn 是 Hacker News 的帖子流。
  */
